@@ -37,7 +37,20 @@ bool APredator::SocketReceive()
 		const FString ReceivedUE4String = FString(ANSI_TO_TCHAR(reinterpret_cast<const char*>(ReceiveData.GetData())));
 		FString log = "Server:" + ReceivedUE4String;
 		UE_LOG(LogTemp, Warning, TEXT("*** %s"), *log);
-		//m_RecvThread = FRunnableThread::Create(new FReceiveThread(Host), TEXT("RecvThread"));
+		FServerCommand Command;
+		FJsonObjectConverter::JsonObjectStringToUStruct(ReceivedUE4String, &Command, 0, 0);
+		if (Command.Command == "update_predator_destination") {
+			FLocation DestinationLocation;
+			FJsonObjectConverter::JsonObjectStringToUStruct(Command.Content, &DestinationLocation, 0, 0);
+			UE_LOG(LogTemp, Warning, TEXT("New predator destination (%f,%f)"), DestinationLocation.x, DestinationLocation.y);
+			Destination.X = DestinationLocation.x;
+			Destination.Y = DestinationLocation.y;
+		}
+		if (Command.Command == "update_predator_speed") {
+			speed = FCString::Atof(*Command.Content);
+			UE_LOG(LogTemp, Warning, TEXT("New predator speed (%f)"), speed);
+		}
+			//m_RecvThread = FRunnableThread::Create(new FReceiveThread(Host), TEXT("RecvThread"));
 		return true;
 	}
 	return false;
@@ -96,21 +109,22 @@ void APredator::Tick(float DeltaTime)
 	if (USceneComponent* RootComp = GetRootComponent()) {
 		if (APawn* LocalPawn = UGameplayStatics::GetPlayerPawn(GetWorld(), 0)) {
 			RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
-			auto direction = LocalPawn->GetActorLocation() - RootComp->GetComponentLocation();
+			FVector direction = Destination - RootComp->GetComponentLocation();
+			direction.Z = 0;
 			CurrentLocation += direction * speed * DeltaTime;
 			SetActorLocation(CurrentLocation);
 			if (AcumDelta >= 1.0 / double(UpdatesPerSecond)) {
 				AcumDelta = 0;
 				FServerCommand ServerCommand;
-				ServerCommand.Command = TEXT("update_game_status");
-				FGameStatus GameStatus;
+				ServerCommand.Command = TEXT("update_game_state");
+				FExperimentState ExperimentState;
 				auto PreyLocation = LocalPawn->GetActorLocation();
-				GameStatus.PreyLocation.x = PreyLocation.X;
-				GameStatus.PreyLocation.y = PreyLocation.Y;
+				ExperimentState.PreyLocation.x = PreyLocation.X;
+				ExperimentState.PreyLocation.y = PreyLocation.Y;
 				auto PredatorLocation = RootComp->GetComponentLocation();
-				GameStatus.PredatorLocation.x = PredatorLocation.X;
-				GameStatus.PredatorLocation.y = PredatorLocation.Y;
-				FJsonObjectConverter::UStructToJsonObjectString(GameStatus, ServerCommand.Content);
+				ExperimentState.PredatorLocation.x = PredatorLocation.X;
+				ExperimentState.PredatorLocation.y = PredatorLocation.Y;
+				FJsonObjectConverter::UStructToJsonObjectString(ExperimentState, ServerCommand.Content);
 				ServerCommand.Content = Clean(ServerCommand.Content);
 				FString Buffer;
 				FJsonObjectConverter::UStructToJsonObjectString(ServerCommand, Buffer);

@@ -41,6 +41,7 @@ public class Experiment_plugin : ModuleRules
 				"Networking",
 				"Sockets",
 				"InputCore",
+				"Json",
 				"JsonUtilities"
 				// ... add private dependencies that you statically link with here ...	
 			}

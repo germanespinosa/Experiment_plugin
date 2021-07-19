@@ -20,8 +20,9 @@ public:
 		double y;
 };
 
+
 USTRUCT()
-struct FGameStatus
+struct FExperimentState
 {
 	GENERATED_BODY()
 public:
@@ -78,4 +79,5 @@ public:
 	FSocket* Host;
 	FIPv4Address ip;
 	FRunnableThread* m_RecvThread;
+	FVector Destination;
 };

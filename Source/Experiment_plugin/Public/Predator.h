@@ -54,6 +54,9 @@ class EXPERIMENT_PLUGIN_API APredator : public AActor
 public:
 	// Sets default values for this actor's properties
 	APredator();
+
+	UPROPERTY(EditAnywhere, Category = Environment)
+		APawn *Prey;
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
 		FString ServerIpAddress = "192.168.137.39";
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
@@ -73,11 +76,12 @@ protected:
 
 public:
 	// Called every frame
+	bool Connected;
 	virtual void Tick(float DeltaTime) override;
 	FVector CurrentLocation;
 	float speed;
 	FSocket* Host;
 	FIPv4Address ip;
-	FRunnableThread* m_RecvThread;
 	FVector Destination;
+	FDateTime ExperimentStartTime;
 };

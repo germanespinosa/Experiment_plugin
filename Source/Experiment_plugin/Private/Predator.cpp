@@ -92,7 +92,7 @@ APredator::APredator()
 void APredator::BeginPlay()
 {
 	Super::BeginPlay();
-	if (!Prey) Prey = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+	//if (!Prey) Prey = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 	Connected = SocketCreate(ServerIpAddress, ServerPort);
 	ExperimentStartTime = FDateTime::UtcNow();
 }
@@ -110,30 +110,29 @@ void APredator::Tick(float DeltaTime)
 	AcumDelta += DeltaTime;
 	if (USceneComponent* RootComp = GetRootComponent()) {
 		if (APawn* LocalPawn = Prey) {
+			auto PreyLocation = LocalPawn->GetActorLocation();
+			Destination.Z = PreyLocation.Z;
 			RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
 			FVector direction = Destination - RootComp->GetComponentLocation();
-			direction.Z = 0;
+			//direction.Z = 0;
 			CurrentLocation += direction * speed * DeltaTime;
 			SetActorLocation(CurrentLocation);
 			auto TimeStamp = ((float)(FDateTime::UtcNow() - ExperimentStartTime).GetTotalMilliseconds() / 1000);
 			AcumDelta = 0;
 			FServerCommand ServerCommand;
 			ServerCommand.Command = TEXT("update_game_state");
-			FExperimentState ExperimentState;
-				
-				
-			auto PreyLocation = LocalPawn->GetActorLocation();
-			ExperimentState.PreyLocation.x = PreyLocation.X;
-			ExperimentState.PreyLocation.y = PreyLocation.Y;
+			//FExperimentState ExperimentState;
+			//ExperimentState.PreyLocation.x = PreyLocation.X;
+			//ExperimentState.PreyLocation.y = PreyLocation.Y;
 				
 			auto PredatorLocation = RootComp->GetComponentLocation();
-			ExperimentState.PredatorLocation.x = PredatorLocation.X;
-			ExperimentState.PredatorLocation.y = PredatorLocation.Y;
+			//ExperimentState.PredatorLocation.x = PredatorLocation.X;
+			//ExperimentState.PredatorLocation.y = PredatorLocation.Y;
 				
 			auto PreyOrientation = LocalPawn->GetViewRotation();
 			auto PredatorOrientation = RootComp->GetComponentRotation();
 
-			FJsonObjectConverter::UStructToJsonObjectString(ExperimentState, ServerCommand.Content);
+			//FJsonObjectConverter::UStructToJsonObjectString(ExperimentState, ServerCommand.Content);
 			ServerCommand.Content = FString::Printf(TEXT("[%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), TimeStamp, PreyLocation.X, PreyLocation.Y, PreyLocation.Z, PreyOrientation.Roll, PreyOrientation.Pitch, PreyOrientation.Yaw, PredatorLocation.X, PredatorLocation.Y, PredatorLocation.Z, PredatorOrientation.Roll, PredatorOrientation.Pitch, PredatorOrientation.Yaw);
 			FString Buffer;
 			FJsonObjectConverter::UStructToJsonObjectString(ServerCommand, Buffer);

@@ -55,8 +55,8 @@ public:
 	// Sets default values for this actor's properties
 	APredator();
 
-	UPROPERTY(EditAnywhere, Category = Environment)
-		APawn *Prey;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Environment)
+		bool Debug;
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
 		FString ServerIpAddress = "192.168.137.39";
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
@@ -83,5 +83,10 @@ public:
 	FSocket* Host;
 	FIPv4Address ip;
 	FVector Destination;
+	UPROPERTY(BlueprintReadWrite)
 	FDateTime ExperimentStartTime;
+	UPROPERTY(BlueprintReadWrite)
+	APawn* Prey;
+	bool InEpisode;
+	int32 Episode;
 };

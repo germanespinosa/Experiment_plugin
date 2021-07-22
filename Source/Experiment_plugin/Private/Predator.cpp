@@ -50,7 +50,14 @@ bool APredator::SocketReceive()
 			speed = FCString::Atof(*Command.Content);
 			UE_LOG(LogTemp, Warning, TEXT("New predator speed (%f)"), speed);
 		}
-			//m_RecvThread = FRunnableThread::Create(new FReceiveThread(Host), TEXT("RecvThread"));
+		if (Command.Command == "update_predator_location") {
+			FLocation NewLocation;
+			FJsonObjectConverter::JsonObjectStringToUStruct(Command.Content, &NewLocation, 0, 0);
+			UE_LOG(LogTemp, Warning, TEXT("New predator location  (%f,%f)"), NewLocation.x, NewLocation.y);
+			CurrentLocation.X = NewLocation.x;
+			CurrentLocation.Y = NewLocation.y;
+			SetActorLocation(CurrentLocation);
+		}
 		return true;
 	}
 	return false;
@@ -92,9 +99,10 @@ APredator::APredator()
 void APredator::BeginPlay()
 {
 	Super::BeginPlay();
-	//if (!Prey) Prey = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
+	if (Debug) Prey = UGameplayStatics::GetPlayerPawn(GetWorld(), 0);
 	Connected = SocketCreate(ServerIpAddress, ServerPort);
 	ExperimentStartTime = FDateTime::UtcNow();
+	InEpisode = false;
 }
 
 FString APredator::Clean(FString str)
@@ -110,37 +118,32 @@ void APredator::Tick(float DeltaTime)
 	AcumDelta += DeltaTime;
 	if (USceneComponent* RootComp = GetRootComponent()) {
 		if (APawn* LocalPawn = Prey) {
-			auto PreyLocation = LocalPawn->GetActorLocation();
-			Destination.Z = PreyLocation.Z;
-			RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
-			FVector direction = Destination - RootComp->GetComponentLocation();
-			//direction.Z = 0;
-			CurrentLocation += direction * speed * DeltaTime;
-			SetActorLocation(CurrentLocation);
-			auto TimeStamp = ((float)(FDateTime::UtcNow() - ExperimentStartTime).GetTotalMilliseconds() / 1000);
-			AcumDelta = 0;
-			FServerCommand ServerCommand;
-			ServerCommand.Command = TEXT("update_game_state");
-			//FExperimentState ExperimentState;
-			//ExperimentState.PreyLocation.x = PreyLocation.X;
-			//ExperimentState.PreyLocation.y = PreyLocation.Y;
-				
-			auto PredatorLocation = RootComp->GetComponentLocation();
-			//ExperimentState.PredatorLocation.x = PredatorLocation.X;
-			//ExperimentState.PredatorLocation.y = PredatorLocation.Y;
-				
-			auto PreyOrientation = LocalPawn->GetViewRotation();
-			auto PredatorOrientation = RootComp->GetComponentRotation();
-
-			//FJsonObjectConverter::UStructToJsonObjectString(ExperimentState, ServerCommand.Content);
-			ServerCommand.Content = FString::Printf(TEXT("[%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), TimeStamp, PreyLocation.X, PreyLocation.Y, PreyLocation.Z, PreyOrientation.Roll, PreyOrientation.Pitch, PreyOrientation.Yaw, PredatorLocation.X, PredatorLocation.Y, PredatorLocation.Z, PredatorOrientation.Roll, PredatorOrientation.Pitch, PredatorOrientation.Yaw);
-			FString Buffer;
-			FJsonObjectConverter::UStructToJsonObjectString(ServerCommand, Buffer);
-			Buffer = Clean(Buffer);
+			if (!InEpisode) Episode++;
+			InEpisode = true;
 			if (Connected && AcumDelta >= 1.0 / double(UpdatesPerSecond)) {
+				auto PreyLocation = LocalPawn->GetActorLocation();
+				Destination.Z = PreyLocation.Z;
+				RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
+				FVector direction = Destination - RootComp->GetComponentLocation();
+				CurrentLocation += direction * speed * DeltaTime;
+				SetActorLocation(CurrentLocation);
+				auto TimeStamp = ((float)(FDateTime::UtcNow() - ExperimentStartTime).GetTotalMilliseconds() / 1000);
+				FServerCommand ServerCommand;
+				ServerCommand.Command = TEXT("update_game_state");
+				auto PredatorLocation = RootComp->GetComponentLocation();
+				auto PreyOrientation = LocalPawn->GetViewRotation();
+				auto PredatorOrientation = RootComp->GetComponentRotation();
+				ServerCommand.Content = FString::Printf(TEXT("[%d,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), Episode, TimeStamp, PreyLocation.X, PreyLocation.Y, PreyLocation.Z, PreyOrientation.Roll, PreyOrientation.Pitch, PreyOrientation.Yaw, PredatorLocation.X, PredatorLocation.Y, PredatorLocation.Z, PredatorOrientation.Roll, PredatorOrientation.Pitch, PredatorOrientation.Yaw);
+				FString Buffer;
+				FJsonObjectConverter::UStructToJsonObjectString(ServerCommand, Buffer);
+				Buffer = Clean(Buffer);
 				SocketSend(Buffer);
 				SocketReceive();
+				AcumDelta = 0;
 			}
+		}
+		else {
+			InEpisode = false;
 		}
 	}
 

@@ -120,13 +120,13 @@ void APredator::Tick(float DeltaTime)
 		if (APawn* LocalPawn = Prey) {
 			if (!InEpisode) Episode++;
 			InEpisode = true;
+			auto PreyLocation = LocalPawn->GetActorLocation();
+			Destination.Z = PreyLocation.Z;
+			RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
+			FVector direction = Destination - RootComp->GetComponentLocation();
+			CurrentLocation += direction * speed * DeltaTime;
+			SetActorLocation(CurrentLocation);
 			if (Connected && AcumDelta >= 1.0 / double(UpdatesPerSecond)) {
-				auto PreyLocation = LocalPawn->GetActorLocation();
-				Destination.Z = PreyLocation.Z;
-				RootComp->SetWorldRotation((RootComp->GetComponentLocation() - LocalPawn->GetActorLocation()).GetSafeNormal().Rotation());
-				FVector direction = Destination - RootComp->GetComponentLocation();
-				CurrentLocation += direction * speed * DeltaTime;
-				SetActorLocation(CurrentLocation);
 				auto TimeStamp = ((float)(FDateTime::UtcNow() - ExperimentStartTime).GetTotalMilliseconds() / 1000);
 				FServerCommand ServerCommand;
 				ServerCommand.Command = TEXT("update_game_state");

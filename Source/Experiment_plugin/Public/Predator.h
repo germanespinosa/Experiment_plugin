@@ -22,6 +22,36 @@ public:
 
 
 USTRUCT()
+struct FCoordinates
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY()
+		int x;
+	UPROPERTY()
+		int y;
+};
+
+USTRUCT()
+struct FCell
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY()
+		int id;
+	UPROPERTY()
+		int cell_type;
+	UPROPERTY()
+		FCoordinates coordinates;
+	UPROPERTY()
+		FLocation location;
+	UPROPERTY()
+		bool occluded;
+};
+
+
+
+USTRUCT()
 struct FExperimentState
 {
 	GENERATED_BODY()
@@ -31,7 +61,6 @@ public:
 	UPROPERTY()
 		FLocation PredatorLocation;
 };
-
 
 USTRUCT()
 struct FServerCommand
@@ -43,6 +72,12 @@ public:
 	UPROPERTY()
 		FString Content;
 };
+
+bool SocketCreate(FString IPStr, int32 port, FSocket** Host);
+bool SocketSend(FString message, FSocket* Host);
+FString SocketReceive(FSocket* Host);
+FString CleanMessage(FString str);
+
 
 
 UCLASS()
@@ -58,17 +93,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Environment)
 		bool Debug;
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
-		FString ServerIpAddress = "192.168.137.39";
+		FString ServerIpAddress = "127.0.0.1";
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
-		int32 ServerPort = 65123;
+		int32 ServerPort = 4000;
 	UPROPERTY(EditAnywhere, Category = ServerConfig)
 		int32 UpdatesPerSecond = 10;
 
-	FString Clean(FString str);
-	bool SocketCreate(FString IPStr, int32 port);
-	bool SocketSend(FString message);
-	bool SocketReceive();
-	FString StringFromBinaryArray(TArray<uint8> BinaryArray);
+	void ProcessServerMessage(FString message);
 
 protected:
 	// Called when the game starts or when spawned
@@ -81,7 +112,6 @@ public:
 	FVector CurrentLocation;
 	float speed;
 	FSocket* Host;
-	FIPv4Address ip;
 	FVector Destination;
 	UPROPERTY(BlueprintReadWrite)
 	FDateTime ExperimentStartTime;

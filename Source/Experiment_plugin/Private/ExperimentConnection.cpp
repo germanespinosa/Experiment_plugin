@@ -65,7 +65,6 @@ bool UExperimentConnection::StartEpisode(APawn *PreyPawn, int ParticipantId) {
 }
 
 bool UExperimentConnection::EndEpisode() {
-	Prey = nullptr;
 	if (!Connection->IsConnected()) return false;
 	return SendEmptyMessage("end_episode");
 }

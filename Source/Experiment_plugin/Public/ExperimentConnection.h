@@ -39,13 +39,10 @@ public:
 
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
-	bool StartEpisode(APawn *PreyPawn);
+	bool StartEpisode(APawn *PreyPawn, int ParticipantId);
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
 	bool EndEpisode();
-
-	UFUNCTION(BlueprintCallable, Category = Experiment)
-	bool SpawnPredator();
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
 	float TimeStamp();
@@ -63,10 +60,22 @@ public:
 	float Speed = .2;
 
 	UPROPERTY(BlueprintReadWrite)
+	int UpdatesPerSecond = 10;
+
+	UPROPERTY(BlueprintReadWrite)
 	AActor* Predator;
 	
 	UPROPERTY(BlueprintReadWrite)
 	APawn* Prey;
+
+	UPROPERTY(BlueprintReadWrite)
+	bool EpisodeInProgress;
+
+	UPROPERTY(BlueprintReadWrite)
+	bool PreyIsCaught;
+
+	UPROPERTY(BlueprintReadWrite)
+	bool UpdateWorld;
 
 	bool SendMessage(const FServerCommand &Message);
 

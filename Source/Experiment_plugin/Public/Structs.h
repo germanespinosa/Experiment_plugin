@@ -12,6 +12,15 @@ public:
 		float y;
 };
 
+USTRUCT(Blueprintable)
+struct FOcclusions
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<int> OcclusionIds;
+};
+
 
 USTRUCT(Blueprintable)
 struct FCoordinates

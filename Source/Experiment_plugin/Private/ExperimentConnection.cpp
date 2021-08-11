@@ -56,28 +56,18 @@ bool UExperimentConnection::GetPredatorSpawnCell(bool Wait) {
 	return false;
 }
 
-bool UExperimentConnection::StartEpisode(APawn *PreyPawn) {
+bool UExperimentConnection::StartEpisode(APawn *PreyPawn, int ParticipantId) {
 	Prey = PreyPawn;
-	if (!Connection->Connect(RemoteIp, RemotePort)) return false;
-	if (!SendEmptyMessage("start_episode")) return false;
+	PreyIsCaught = false;
+	if (!SendIntMessage("start_episode",ParticipantId)) return false;
 	EpisodeStartTime = FDateTime::UtcNow();
-	SpawnPredator();
 	return true;
 }
 
 bool UExperimentConnection::EndEpisode() {
 	Prey = nullptr;
 	if (!Connection->IsConnected()) return false;
-	if (!SendEmptyMessage("end_episode")) return false;
-	if (!GetPredatorSpawnCell(true)) return false;
-	return Disconnect();
-}
-
-bool UExperimentConnection::SpawnPredator()
-{
-	auto Location = GetSpawnLocation();
-	Predator->SetActorLocation(Location);
-	return true;
+	return SendEmptyMessage("end_episode");
 }
 
 bool UExperimentConnection::SendMessage(const FServerCommand& Message) {
@@ -121,18 +111,16 @@ bool UExperimentConnection::SetState(float DeltaTime) {
 	auto PredatorLocation = Predator->GetActorLocation();
 	auto PreyOrientation = Prey->GetViewRotation();
 	auto PredatorOrientation = Predator->GetActorRotation();
-
 	static float AcumDelta = 0;
 	ProcessServerMessage();
 	AcumDelta += DeltaTime;
-	FVector Direction = Destination - PredatorLocation;
+	FVector Direction = (Destination - PredatorLocation).GetSafeNormal();
 	auto NewLocation = PredatorLocation + (Direction * Speed * DeltaTime);
 	auto NewRotation = (PreyLocation - PredatorLocation).GetSafeNormal().Rotation();
 	Predator->SetActorLocationAndRotation(NewLocation, NewRotation);
 
-	if (AcumDelta < .1) return true;
+	if (UpdatesPerSecond > 0 && AcumDelta < 1/(float)UpdatesPerSecond) return true;
 	AcumDelta = 0;
-
 	return SendStringMessage("set_game_state", FString::Printf(TEXT("[%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), 
 		TimeStamp(), 
 		PreyLocation.X, 
@@ -178,11 +166,20 @@ void UExperimentConnection::ProcessServerMessage() {
 		PredatorSpawnCellId = FCString::Atoi(*Response.Content);
 		UE_LOG(LogTemp, Warning, TEXT("New predator spawn cell (%d)"), PredatorSpawnCellId);
 		Connection->Disconnect();
+	} else
+	if (Response.Command == "set_prey_caught") {
+		PreyIsCaught = true;
+		UE_LOG(LogTemp, Warning, TEXT("Prey has been caught"));
+	} else
+	if (Response.Command == "set_update_world") {
+		UpdateWorld = true;
+		UE_LOG(LogTemp, Warning, TEXT("A new world will be loaded when the next episodes ends"));
 	}
 
 }
 
 FVector UExperimentConnection::GetSpawnLocation() {
+	GetPredatorSpawnCell(true);
 	FCell SpawnCell = GetCell(PredatorSpawnCellId);
 	FVector SpawnLocation;
 	SpawnLocation.X = SpawnCell.location.x;
@@ -198,7 +195,7 @@ bool UExperimentConnection::GetResponse(FServerCommand& Response) {
 }
 
 void UExperimentConnection::GetCells() {
-	if (Cells.Num() == 0) {
+	if (Cells.Num() == 0) { //initialize the cell location and occlusions
 		Cells.Reserve(331);
 		FServerCommand Response;
 		for (int i = 0; i < 331; i++) {
@@ -208,6 +205,16 @@ void UExperimentConnection::GetCells() {
 			if (WaitResponse(Response) && Response.Command=="set_cell") {
 				FJsonObjectConverter::JsonObjectStringToUStruct(Response.Content, &NewCell, 0, 0);
 			}
+		}
+	}
+	else {
+		FServerCommand Response;
+		SendEmptyMessage("get_occlusions");
+		FOcclusions Occlusions;
+		if (WaitResponse(Response) && Response.Command == "set_occlusions") {
+			FJsonObjectConverter::JsonObjectStringToUStruct(Response.Content, &Occlusions, 0, 0);
+			for (auto& Cell : Cells) Cell.occluded = false;
+			for (auto OcclusionId : Occlusions.OcclusionIds) Cells[OcclusionId].occluded = true;
 		}
 	}
 }

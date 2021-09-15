@@ -26,9 +26,6 @@ public:
 	void SetPredatorActor(AActor *PredatorActor);
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
-	bool GetPredatorSpawnCell(bool Wait);
-
-	UFUNCTION(BlueprintCallable, Category = Experiment)
 	void GetCells();
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
@@ -36,7 +33,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
 	void ProcessServerMessage();
-
 
 	UFUNCTION(BlueprintCallable, Category = Experiment)
 	bool StartEpisode(APawn *PreyPawn, int ParticipantId);
@@ -56,8 +52,14 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Experiment)
 	bool Connect();
 
+	UFUNCTION(BlueprintCallable, Category = Experiment)
+	bool GetUpdates();
+
 	UPROPERTY(BlueprintReadWrite)
 	float Speed = .2;
+
+	UPROPERTY(BlueprintReadWrite)
+	float TurningSpeed = 90;
 
 	UPROPERTY(BlueprintReadWrite)
 	int UpdatesPerSecond = 10;
@@ -77,25 +79,45 @@ public:
 	UPROPERTY(BlueprintReadWrite)
 	bool UpdateWorld;
 
+	UPROPERTY(BlueprintReadWrite)
+	bool ShowVisibility;
+
+	UPROPERTY(BlueprintReadWrite)
+	TArray<AActor*> VisibilityCone;
+
+	UPROPERTY(BlueprintReadWrite)
+	TArray<AActor*> Columns;
+
+	UPROPERTY(BlueprintReadWrite)
+	FString WorldName;
+
 	bool SendMessage(const FServerCommand &Message);
 
-	bool SendEmptyMessage(const FString command);
+	bool SendEmptyMessage(const FString Command);
 
-	bool SendIntMessage(const FString command, int content);
+	bool SendIntMessage(const FString Command, int Content);
 
-	bool SendFloatMessage(const FString command, float content);
+	bool SendFloatMessage(const FString Command, float Content);
 
-	bool SendStringMessage(const FString command, const FString content);
+	bool SendStringMessage(const FString Command, const FString Content);
 
-	bool GetResponse(FServerCommand &message);
+	bool GetResponse(FServerCommand &Message);
 
-	bool WaitResponse(FServerCommand& message);
+	bool WaitResponse(FServerCommand& Message, int TimeOut = 0);
 
 	FString CleanMessage(const FString& str);
 
+	void ShowMarker(int id);
+
+	void HideMarker(int id);
+
 	TArray<FCell> Cells;
+
 	FVector Destination;
+	bool Contact;
 	int PredatorSpawnCellId;
+	int DestinationCellId;
+	bool IsPreyVisible;
 	FString RemoteIp;
 	int RemotePort;
 	UConnection *Connection = NewObject<UConnection>();

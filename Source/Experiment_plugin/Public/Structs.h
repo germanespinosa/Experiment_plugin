@@ -13,6 +13,19 @@ public:
 };
 
 USTRUCT(Blueprintable)
+struct FPredatorInstruction
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Environment)
+	int destination;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Environment)
+	int next_step;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Environment)
+	bool contact;
+};
+
+USTRUCT(Blueprintable)
 struct FOcclusions
 {
 	GENERATED_BODY()

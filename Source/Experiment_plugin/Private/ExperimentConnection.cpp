@@ -39,26 +39,17 @@ void UExperimentConnection::SetPredatorActor(AActor* PredatorActor)
 	Predator = PredatorActor;
 }
 
-bool UExperimentConnection::WaitResponse(FServerCommand& message) {
-	message.Command = "";
-	while (message.Command == "" && GetResponse(message));
-	return message.Command != "";
-}
-
-bool UExperimentConnection::GetPredatorSpawnCell(bool Wait) {
-	if (!SendEmptyMessage("get_spawn_cell")) return false;
-	if (!Wait) return true;
-	FServerCommand Response;
-	if (WaitResponse(Response) && Response.Command == "set_spawn_cell") {
-		PredatorSpawnCellId = FCString::Atoi(*Response.Content);
-		return true;
-	}
-	return false;
+bool UExperimentConnection::WaitResponse(FServerCommand& Message, int TimeOut) {
+	auto StartTime = FDateTime::UtcNow();
+	Message.Command = "";
+	while (Message.Command == "" && GetResponse(Message) && (TimeOut == 0 || (FDateTime::UtcNow() - EpisodeStartTime).GetTotalMilliseconds() < TimeOut));
+	return Message.Command != "";
 }
 
 bool UExperimentConnection::StartEpisode(APawn *PreyPawn, int ParticipantId) {
 	Prey = PreyPawn;
 	PreyIsCaught = false;
+	for (int Id = 0; Id < 331; Id++) VisibilityCone[Id]->SetActorHiddenInGame(true);
 	if (!SendIntMessage("start_episode",ParticipantId)) return false;
 	EpisodeStartTime = FDateTime::UtcNow();
 	return true;
@@ -104,23 +95,74 @@ bool UExperimentConnection::SendStringMessage(const FString command, const FStri
 	return SendMessage(Message);
 }
 
+float angle_difference(float a1, float a2, bool &s) {
+	if (a1 > a2) {
+		auto d = a1 - a2;
+		if (d < 180) {
+			s = true;
+			return d;
+		}
+		else {
+			s = false;
+			return 360 + a2 - a1;
+		}
+	}
+	else {
+		auto d = a2 - a1;
+		if (d < 180) {
+			s = false;
+			return d;
+		}
+		else {
+			s = true;
+			return 360 + a1 - a2;
+		}
+	}
+}
+
+float angle_adjustment(float thetha, float goal, float limit) {
+	bool s;
+	float dif = angle_difference(thetha, goal, s);
+	float adjustment;
+	if (dif > limit) {
+		adjustment = limit;
+	}
+	else {
+		adjustment = dif;
+	}
+	if (s) return -adjustment;
+	else return adjustment;
+}
+
 bool UExperimentConnection::SetState(float DeltaTime) {
+	static float AcumDelta = 0;
+	AcumDelta += DeltaTime;
 	if (Prey == nullptr || Predator == nullptr) return false;
 	auto PreyLocation = Prey->GetActorLocation();
 	auto PredatorLocation = Predator->GetActorLocation();
+
 	auto PreyOrientation = Prey->GetViewRotation();
 	auto PredatorOrientation = Predator->GetActorRotation();
-	static float AcumDelta = 0;
+	
+	auto Yaw = PredatorOrientation.Yaw;
 	ProcessServerMessage();
-	AcumDelta += DeltaTime;
-	FVector Direction = (Destination - PredatorLocation).GetSafeNormal();
+	auto Direction = (Destination - PredatorLocation).GetSafeNormal();
 	auto NewLocation = PredatorLocation + (Direction * Speed * DeltaTime);
-	auto NewRotation = (PreyLocation - PredatorLocation).GetSafeNormal().Rotation();
+	FRotator DestinationRotation;
+	if (IsPreyVisible) {
+		DestinationRotation = (PreyLocation - PredatorLocation).GetSafeNormal().Rotation();
+	}
+	else {
+		DestinationRotation = (Destination - PredatorLocation).GetSafeNormal().Rotation();
+	}
+	auto YawError = DestinationRotation.Yaw - Yaw;
+	auto RotationAdjustment = angle_adjustment(Yaw, DestinationRotation.Yaw, (TurningSpeed * DeltaTime));
+	auto NewRotation = PredatorOrientation;
+	NewRotation.Yaw = NewRotation.Yaw + RotationAdjustment ;
 	Predator->SetActorLocationAndRotation(NewLocation, NewRotation);
-
 	if (UpdatesPerSecond > 0 && AcumDelta < 1/(float)UpdatesPerSecond) return true;
 	AcumDelta = 0;
-	return SendStringMessage("set_game_state", FString::Printf(TEXT("[%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), 
+	SendStringMessage("set_game_state", FString::Printf(TEXT("[%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f,%f]"), 
 		TimeStamp(), 
 		PreyLocation.X, 
 		PreyLocation.Y, 
@@ -134,6 +176,8 @@ bool UExperimentConnection::SetState(float DeltaTime) {
 		PredatorOrientation.Roll, 
 		PredatorOrientation.Pitch, 
 		PredatorOrientation.Yaw));	
+	if (ShowVisibility)	SendEmptyMessage("get_visibility");
+	return true;
 }
 
 bool UExperimentConnection::Disconnect()
@@ -146,39 +190,76 @@ bool UExperimentConnection::Connect()
 	return Connection->Connect(RemoteIp, RemotePort);
 }
 
+void UExperimentConnection::ShowMarker(int id) {
+	auto Marker = VisibilityCone[id];
+	Marker->SetHidden(false);
+}
+
+void UExperimentConnection::HideMarker(int id) {
+	auto Marker = VisibilityCone[id];
+	Marker->SetHidden(true);
+}
+
 void UExperimentConnection::ProcessServerMessage() {
 	FServerCommand Response;
 	if (!GetResponse(Response)) return;
 	if (Response.Command == "set_destination_cell") {
-		auto DestinationCellId = FCString::Atoi(*Response.Content);
+		FPredatorInstruction Instruction;
+		FJsonObjectConverter::JsonObjectStringToUStruct(Response.Content, &Instruction, 0, 0);
+		DestinationCellId = Instruction.next_step;
 		auto& DestinationCell = Cells[DestinationCellId];
+		IsPreyVisible = Instruction.contact;
 		Destination.X = DestinationCell.location.x;
 		Destination.Y = DestinationCell.location.y;
 		Destination.Z = Predator->GetActorLocation().Z;
-		UE_LOG(LogTemp, Warning, TEXT("New predator destination (%f, %f, %f)"), Destination.X, Destination.Y, Destination.Z);
 	} else
+	if (Response.Command == "set_turning_speed") {
+		TurningSpeed = FCString::Atof(*Response.Content);
+	}
+	else 
 	if (Response.Command == "set_speed") {
 		Speed = FCString::Atof(*Response.Content);
-		UE_LOG(LogTemp, Warning, TEXT("New predator speed (%f)"), Speed);
 	} else 
 	if (Response.Command == "set_spawn_cell") {
 		PredatorSpawnCellId = FCString::Atoi(*Response.Content);
-		UE_LOG(LogTemp, Warning, TEXT("New predator spawn cell (%d)"), PredatorSpawnCellId);
-		Connection->Disconnect();
+	} else
+	if (Response.Command == "set_visibility") {
+		if (ShowVisibility) {
+			Response.Content.RemoveFromEnd("]");
+			Response.Content.RemoveFromStart("[");
+			TArray<FString> VisibleCellIds;
+			Response.Content.ParseIntoArray(VisibleCellIds, TEXT(","), false);
+			for (int Id = 0; Id < 331; Id++) VisibilityCone[Id]->SetActorHiddenInGame(true);
+			for (auto& VisibleCellId : VisibleCellIds) {
+				auto CellId = FCString::Atoi(*VisibleCellId);
+				VisibilityCone[CellId]->SetActorHiddenInGame(false);
+			}
+		}
 	} else
 	if (Response.Command == "set_prey_caught") {
 		PreyIsCaught = true;
-		UE_LOG(LogTemp, Warning, TEXT("Prey has been caught"));
-	} else
-	if (Response.Command == "set_update_world") {
-		UpdateWorld = true;
-		UE_LOG(LogTemp, Warning, TEXT("A new world will be loaded when the next episodes ends"));
 	}
-
+	if (Response.Command == "set_occlusions") {
+		FOcclusions Occlusions;
+		FJsonObjectConverter::JsonObjectStringToUStruct(Response.Content, &Occlusions, 0, 0);
+		for (auto& Cell : Cells) Cell.occluded = false;
+		for (auto OcclusionId : Occlusions.OcclusionIds) Cells[OcclusionId].occluded = true;
+		for (unsigned int i = 0; i < 331; i++) {
+			Columns[i]->SetActorHiddenInGame(!Cells[i].occluded);
+		}
+	}
+	if (Response.Command == "set_spawn_cell") {
+		PredatorSpawnCellId = FCString::Atoi(*Response.Content);
+	}
+	if (Response.Command == "show_visibility") {
+		ShowVisibility = true;
+	}
+	if (Response.Command == "hide_visibility") {
+		ShowVisibility = false;
+	}
 }
 
 FVector UExperimentConnection::GetSpawnLocation() {
-	GetPredatorSpawnCell(true);
 	FCell SpawnCell = GetCell(PredatorSpawnCellId);
 	FVector SpawnLocation;
 	SpawnLocation.X = SpawnCell.location.x;
@@ -206,16 +287,10 @@ void UExperimentConnection::GetCells() {
 			}
 		}
 	}
-	else {
-		FServerCommand Response;
-		SendEmptyMessage("get_occlusions");
-		FOcclusions Occlusions;
-		if (WaitResponse(Response) && Response.Command == "set_occlusions") {
-			FJsonObjectConverter::JsonObjectStringToUStruct(Response.Content, &Occlusions, 0, 0);
-			for (auto& Cell : Cells) Cell.occluded = false;
-			for (auto OcclusionId : Occlusions.OcclusionIds) Cells[OcclusionId].occluded = true;
-		}
-	}
+}
+
+bool UExperimentConnection::GetUpdates() {
+	return SendEmptyMessage("get_updates");
 }
 
 FString UExperimentConnection::CleanMessage(const FString& str) {
